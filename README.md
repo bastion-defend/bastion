@@ -76,7 +76,7 @@ Bastion consists of five main components:
 
 ```bash
 # Clone the repository
-git clone https://github.com/mzf11125/bastion.git
+git clone https://github.com/bastion-defend/bastion.git
 cd bastion
 
 # Build the middleware
