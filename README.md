@@ -31,19 +31,23 @@ Bastion v2 is an upgraded fork of Sentinel (by ClawdieLabs), built for the Solan
 
 ## Competitive Differentiation
 
-Bastion focuses on simplicity and hackathon-readiness versus enterprise complexity:
+Bastion is the **first security middleware with on-chain audit and reputation** for AI agents:
 
-| Product | Focus |
-|---------|-------|
+| Product | USP |
+|---------|-----|
 | PayAI | Payments (x402 protocol) |
 | AgentGuard | 4-layer TypeScript defense, 20+ prompt injection patterns |
 | Agent Guardrails | On-chain policies + AI kill switch |
 | AlpenGuard | Enterprise compliance, OIDC, KMS, EU AI Act |
 | Sigil | TEE custody, on-chain vault enforcement |
 | AgentShield | ElizaOS-specific, 6-layer defense |
-| **Bastion** | Simple, hackathon-ready security middleware |
+| **Bastion** | On-chain agent reputation + immutable audit trail + policy enforcement |
 
-Bastion's USP: Simple, hackathon-ready security middleware (vs enterprise complexity).
+**Why Bastion wins:** Every AI agent will have a wallet. Without security, one prompt injection drains everything. Bastion provides:
+1. **Immutable audit trail** - on-chain, verifiable agent behavior history
+2. **Agent reputation** - on-chain identity + reputation tracking
+3. **Policy enforcement** - whitelist, rate limits, balance caps
+4. **Circuit breaker** - emergency pause for protocol-level safety
 
 ## Problem
 
