@@ -227,7 +227,7 @@ function Dashboard() {
 
       {/* Footer */}
       <footer className="mt-8 text-center text-gray-600 text-sm">
-        <p>Bastion v0.2.0 • Built for the Solana Frontier Hackathon</p>
+        <p>Bastion v0.2.0 - Built for the Solana Frontier Hackathon</p>
       </footer>
     </div>
   );

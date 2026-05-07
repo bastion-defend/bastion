@@ -306,4 +306,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-Built for the Solana Frontier Hackathon by Bastion Labs.
+Built for the Solana Frontier Hackathon by Bastion Security.
