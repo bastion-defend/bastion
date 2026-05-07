@@ -1,0 +1,24 @@
+[package]
+name = "bastion-audit"
+version = "0.2.0"
+edition = "2024"
+description = "On-chain audit program for Bastion security middleware"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+devnet = []
+
+[dependencies]
+anchor-lang = { version = "0.30.1", features = ["init"] }
+anchor-spl = "0.30.1"
+solana-program = "1.18"
+borsh = "1"
+thiserror = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1

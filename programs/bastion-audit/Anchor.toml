@@ -1,0 +1,15 @@
+[toolchain]
+anchor-version = "0.30.1"
+solana-version = "1.18"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/dev.json"
+
+[programs]
+devnet = "BaStion11111111111111111111111111111111"
+mainnet = ""
+
+[scripts]
+test = "cargo test --features devnet"
+build = "cargo build --features devnet"
