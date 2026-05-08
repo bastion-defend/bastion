@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("BaStion11111111111111111111111111111111");
+declare_id!("BaSZuLcwjfh75T3TjbVYpTH4qpJt1tNoZ3S6PTkvNhCb");
 
 pub const AUDIT_SEED: &str = "bastion_audit";
 pub const AGENT_SEED: &str = "bastion_agent";
@@ -158,7 +158,7 @@ pub struct LogAudit<'info> {
         init,
         seeds = [
             AUDIT_SEED.as_bytes(),
-            &ctx.accounts.audit_state.total_audits.to_le_bytes()
+            &audit_state.total_audits.to_le_bytes()
         ],
         bump,
         payer = signer,
@@ -180,7 +180,7 @@ pub struct LogAudit<'info> {
 pub struct RegisterAgent<'info> {
     #[account(
         init,
-        seeds = [AGENT_SEED.as_bytes(), authority.key.as_ref()],
+        seeds = [AGENT_SEED.as_bytes(), signer.key().as_ref()],
         bump,
         payer = signer,
         space = 8 + std::mem::size_of::<Agent>()
@@ -240,7 +240,7 @@ pub struct EmergencyResume<'info> {
 }
 
 #[account]
-#[derive(Debug, Init)]
+#[derive(Debug)]
 pub struct AuditState {
     pub owner: Pubkey,
     pub authority: Pubkey,
@@ -254,7 +254,7 @@ pub struct AuditState {
 }
 
 #[account]
-#[derive(Debug, Init)]
+#[derive(Debug)]
 pub struct AuditEntry {
     pub authority: Pubkey,
     pub timestamp: i64,
@@ -266,7 +266,7 @@ pub struct AuditEntry {
 }
 
 #[account]
-#[derive(Debug, Init)]
+#[derive(Debug)]
 pub struct Agent {
     pub authority: Pubkey,
     pub name: String,
@@ -277,7 +277,7 @@ pub struct Agent {
 }
 
 #[account]
-#[derive(Debug, Init)]
+#[derive(Debug)]
 pub struct Policy {
     pub authority: Pubkey,
     pub allowed_programs: Vec<[u8; 32]>,
@@ -309,7 +309,7 @@ pub struct ProtocolResumed {
     pub authority: Pubkey,
 }
 
-#[error]
+#[error_code]
 pub enum BastionError {
     #[msg("Invalid reputation score")]
     InvalidReputation,

@@ -15,13 +15,18 @@ use uuid::Uuid;
 pub mod audit;
 pub mod logger;
 pub mod policy;
+pub mod program_client;
 pub mod simulation;
 
 use audit::{
     AuditEntry, AuditLogger, AuditResult, Decision, TransactionDetails,
     current_timestamp, hash_transaction_payload,
 };
-use policy::{MaxUnitsCheck, NoErrorCheck, Policy, PolicyEngine, SimulationCheck};
+use policy::{
+    classify_intent, FlashLoanPatternCheck, HighSlippageCheck, IntentClassification,
+    MaxUnitsCheck, NoErrorCheck, Policy, PolicyEngine, SimulationCheck,
+};
+use program_client::OnChainClient;
 use simulation::{Simulate, SimulationResult};
 
 #[derive(Clone, serde::Serialize)]
@@ -48,6 +53,7 @@ struct AppState {
     policy_engine: Arc<RwLock<PolicyEngine>>,
     simulator: Arc<dyn Simulate + Send + Sync>,
     logger: Arc<AuditLogger>,
+    on_chain: Arc<OnChainClient>,
     pending_approvals: Arc<RwLock<HashMap<String, PendingApproval>>>,
     started_at: std::time::Instant,
 }
@@ -77,6 +83,18 @@ struct FullPolicyUpdateRequest {
     blocked_addresses: Option<Vec<String>>,
     #[serde(default)]
     simulation_checks_enabled: Option<bool>,
+    #[serde(default)]
+    blockint_flash_loan_check: Option<bool>,
+    #[serde(default)]
+    blockint_high_slippage_check: Option<bool>,
+    #[serde(default)]
+    blockint_mint_authority_blocked: Option<bool>,
+    #[serde(default)]
+    blockint_freeze_authority_blocked: Option<bool>,
+    #[serde(default)]
+    blockint_max_slippage_bps: Option<u64>,
+    #[serde(default)]
+    blockint_risk_labeled_addresses: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize)]
@@ -92,6 +110,12 @@ struct FullPolicyResponse {
     allowed_programs: Vec<String>,
     blocked_addresses: Vec<String>,
     simulation_checks_enabled: bool,
+    blockint_flash_loan_check: bool,
+    blockint_high_slippage_check: bool,
+    blockint_mint_authority_blocked: bool,
+    blockint_freeze_authority_blocked: bool,
+    blockint_max_slippage_bps: u64,
+    blockint_risk_labeled_addresses: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -167,6 +191,7 @@ async fn update_policy(
 async fn get_policy(State(state): State<AppState>) -> Json<FullPolicyResponse> {
     let policy_engine = state.policy_engine.read().await;
     let snapshot = policy_engine.policy_snapshot();
+    let blockint = policy_engine.blockint_rules();
     Json(FullPolicyResponse {
         max_sol_per_tx: snapshot.max_sol_per_tx,
         max_balance_drain_lamports: snapshot.max_balance_drain_lamports,
@@ -174,6 +199,12 @@ async fn get_policy(State(state): State<AppState>) -> Json<FullPolicyResponse> {
         allowed_programs: snapshot.allowed_programs,
         blocked_addresses: snapshot.blocked_addresses,
         simulation_checks_enabled: snapshot.simulation_checks_enabled,
+        blockint_flash_loan_check: blockint.flash_loan_ratio_threshold.is_some(),
+        blockint_high_slippage_check: blockint.max_slippage_bps.is_some(),
+        blockint_mint_authority_blocked: blockint.mint_authority_changes_blocked,
+        blockint_freeze_authority_blocked: blockint.freeze_authority_changes_blocked,
+        blockint_max_slippage_bps: blockint.max_slippage_bps.unwrap_or(500),
+        blockint_risk_labeled_addresses: blockint.risk_labeled_addresses.clone(),
     })
 }
 
@@ -233,7 +264,32 @@ async fn update_full_policy(
         request.blocked_addresses,
         request.simulation_checks_enabled,
     );
+    let mut blockint = policy_engine.blockint_rules().clone();
+    if let Some(v) = request.blockint_flash_loan_check {
+        blockint.flash_loan_ratio_threshold = if v { Some(100.0) } else { None };
+    }
+    if let Some(v) = request.blockint_high_slippage_check {
+        if v {
+            blockint.max_slippage_bps = Some(blockint.max_slippage_bps.unwrap_or(500));
+        } else {
+            blockint.max_slippage_bps = None;
+        }
+    }
+    if let Some(v) = request.blockint_mint_authority_blocked {
+        blockint.mint_authority_changes_blocked = v;
+    }
+    if let Some(v) = request.blockint_freeze_authority_blocked {
+        blockint.freeze_authority_changes_blocked = v;
+    }
+    if let Some(v) = request.blockint_max_slippage_bps {
+        blockint.max_slippage_bps = Some(v);
+    }
+    if let Some(v) = request.blockint_risk_labeled_addresses {
+        blockint.risk_labeled_addresses = v;
+    }
+    policy_engine.update_blockint_rules(blockint);
     let snapshot = policy_engine.policy_snapshot();
+    let blockint = policy_engine.blockint_rules();
     Json(FullPolicyResponse {
         max_sol_per_tx: snapshot.max_sol_per_tx,
         max_balance_drain_lamports: snapshot.max_balance_drain_lamports,
@@ -241,6 +297,12 @@ async fn update_full_policy(
         allowed_programs: snapshot.allowed_programs,
         blocked_addresses: snapshot.blocked_addresses,
         simulation_checks_enabled: snapshot.simulation_checks_enabled,
+        blockint_flash_loan_check: blockint.flash_loan_ratio_threshold.is_some(),
+        blockint_high_slippage_check: blockint.max_slippage_bps.is_some(),
+        blockint_mint_authority_blocked: blockint.mint_authority_changes_blocked,
+        blockint_freeze_authority_blocked: blockint.freeze_authority_changes_blocked,
+        blockint_max_slippage_bps: blockint.max_slippage_bps.unwrap_or(500),
+        blockint_risk_labeled_addresses: blockint.risk_labeled_addresses.clone(),
     })
 }
 
@@ -385,6 +447,53 @@ async fn simulate(
     let tx_details = TransactionDetails::from_transaction_request(request_payload, &tx);
     let signature = tx_details.signature.clone();
 
+    {
+        let engine = state.policy_engine.read().await;
+        if let Err(err) = engine.check_circuit_breaker() {
+            let entry = AuditEntry {
+                ..build_audit_entry(
+                    signature.clone(),
+                    Decision::Blocked(err.clone()),
+                    AuditResult::Blocked,
+                    err.clone(),
+                    None,
+                    intent.clone(),
+                    Some(tx_details.clone()),
+                )
+            };
+            let _ = state.logger.log(entry);
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ErrorResponse { error: err, block_id: None }),
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(ref intent_str) = intent {
+        let classification = classify_intent(&Some(intent_str.clone()));
+        if let IntentClassification::Malicious(pattern) = classification {
+            let err = format!("Intent classified as malicious: detected '{}' pattern", pattern);
+            let entry = AuditEntry {
+                ..build_audit_entry(
+                    signature.clone(),
+                    Decision::Blocked(err.clone()),
+                    AuditResult::Blocked,
+                    err.clone(),
+                    None,
+                    intent.clone(),
+                    Some(tx_details.clone()),
+                )
+            };
+            let _ = state.logger.log(entry);
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ErrorResponse { error: err, block_id: None }),
+            )
+                .into_response();
+        }
+    }
+
     let policy_check = {
         let engine = state.policy_engine.read().await;
         engine.check_transaction(&tx)
@@ -484,7 +593,7 @@ async fn simulate(
             engine.max_balance_drain_lamports()
         };
 
-        let checks: Vec<Box<dyn SimulationCheck>> = if let Some(limit) = max_balance_drain {
+        let mut checks: Vec<Box<dyn SimulationCheck>> = if let Some(limit) = max_balance_drain {
             vec![
                 Box::new(NoErrorCheck),
                 Box::new(MaxUnitsCheck),
@@ -493,6 +602,16 @@ async fn simulate(
         } else {
             vec![Box::new(NoErrorCheck), Box::new(MaxUnitsCheck)]
         };
+
+        let blockint_rules = state.policy_engine.read().await.blockint_rules().clone();
+        if blockint_rules.flash_loan_ratio_threshold.is_some() {
+            checks.push(Box::new(FlashLoanPatternCheck));
+        }
+        if let Some(max_bps) = blockint_rules.max_slippage_bps {
+            checks.push(Box::new(HighSlippageCheck {
+                max_slippage_bps: max_bps,
+            }));
+        }
 
         for check in checks {
             if let Err(err) = check.check(&result) {
@@ -535,7 +654,7 @@ async fn simulate(
 
     let entry = AuditEntry {
         ..build_audit_entry(
-            signature,
+            signature.clone(),
             Decision::Allowed,
             AuditResult::Allowed,
             "All policy and simulation checks passed".to_string(),
@@ -545,6 +664,20 @@ async fn simulate(
         )
     };
     let _ = state.logger.log(entry);
+
+    if state.on_chain.is_enabled() {
+        let on_chain = state.on_chain.clone();
+        let decision: u8 = 0;
+        let sim_hash: [u8; 32] = result.simulation_hash.unwrap_or([0u8; 32]);
+        let reasoning = "All policy and simulation checks passed".to_string();
+        tokio::spawn(async move {
+            if let Err(e) = on_chain.log_audit(decision, sim_hash, &reasoning, None).await {
+                eprintln!("[bastion] On-chain audit log failed: {e}");
+            } else {
+                eprintln!("[bastion] On-chain audit logged successfully");
+            }
+        });
+    }
 
     Json(result).into_response()
 }
@@ -714,15 +847,53 @@ async fn override_block(
     }
 }
 
+#[derive(serde::Serialize)]
+struct CircuitBreakerStatus {
+    engaged: bool,
+}
+
+async fn get_circuit_breaker_status(State(state): State<AppState>) -> Json<CircuitBreakerStatus> {
+    let engaged = state.policy_engine.read().await.is_circuit_breaker_engaged();
+    Json(CircuitBreakerStatus { engaged })
+}
+
+async fn engage_circuit_breaker(State(state): State<AppState>) -> Json<CircuitBreakerStatus> {
+    state.policy_engine.write().await.engage_circuit_breaker();
+    if state.on_chain.is_enabled() {
+        let on_chain = state.on_chain.clone();
+        tokio::spawn(async move {
+            if let Err(e) = on_chain.emergency_pause().await {
+                eprintln!("[bastion] On-chain pause failed: {e}");
+            }
+        });
+    }
+    Json(CircuitBreakerStatus { engaged: true })
+}
+
+async fn disengage_circuit_breaker(State(state): State<AppState>) -> Json<CircuitBreakerStatus> {
+    state.policy_engine.write().await.disengage_circuit_breaker();
+    if state.on_chain.is_enabled() {
+        let on_chain = state.on_chain.clone();
+        tokio::spawn(async move {
+            if let Err(e) = on_chain.emergency_resume().await {
+                eprintln!("[bastion] On-chain resume failed: {e}");
+            }
+        });
+    }
+    Json(CircuitBreakerStatus { engaged: false })
+}
+
 pub fn build_app(
     policy: Policy,
     simulator: Arc<dyn Simulate + Send + Sync>,
     logger: Arc<AuditLogger>,
+    on_chain: OnChainClient,
 ) -> Router {
     let app_state = AppState {
         policy_engine: Arc::new(RwLock::new(PolicyEngine::new(policy))),
         simulator,
         logger,
+        on_chain: Arc::new(on_chain),
         pending_approvals: Arc::new(RwLock::new(HashMap::new())),
         started_at: std::time::Instant::now(),
     };
@@ -761,6 +932,10 @@ pub fn build_app(
         )
         .route("/policy/full", post(update_full_policy).put(update_full_policy))
         .route("/policy/export", get(export_policy_toml))
+        // Circuit breaker
+        .route("/circuit-breaker/status", get(get_circuit_breaker_status))
+        .route("/circuit-breaker/engage", post(engage_circuit_breaker))
+        .route("/circuit-breaker/disengage", post(disengage_circuit_breaker))
         // Static dashboard
         .nest_service("/dashboard", ServeDir::new("static"))
         .with_state(app_state)

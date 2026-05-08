@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use solana_sdk::transaction::Transaction;
 use std::collections::HashMap;
 use std::env;
@@ -14,6 +15,23 @@ pub struct SimulationResult {
     pub error: Option<serde_json::Value>,
     #[serde(default)]
     pub balance_changes: HashMap<String, i64>,
+    #[serde(default)]
+    pub simulation_hash: Option<[u8; 32]>,
+}
+
+pub fn compute_simulation_hash(logs: &[String], error: &Option<serde_json::Value>) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for log in logs {
+        hasher.update(log.as_bytes());
+        hasher.update(b"\0");
+    }
+    if let Some(err) = error {
+        hasher.update(err.to_string().as_bytes());
+    }
+    let hash = hasher.finalize();
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&hash);
+    result
 }
 
 pub trait Simulate: Send + Sync {
@@ -112,6 +130,8 @@ impl Simulate for HeliusSimulator {
             .map(|k| k.to_string())
             .collect();
 
+        let pre_balances = self.fetch_pre_balances(&accounts_to_track)?;
+
         let request_body = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -173,34 +193,83 @@ impl Simulate for HeliusSimulator {
         let mut balance_changes = HashMap::new();
         if let Some(accounts) = result.accounts {
             for (i, account_opt) in accounts.into_iter().enumerate() {
-                if let Some(account) = account_opt {
-                    let address = tx.message.account_keys[i].to_string();
-                    // This is a simplification. Real balance change would compare pre vs post.
-                    // simulateTransaction returns post-simulation state.
-                    // For now, we'll store the post-simulation balance or 0 if we don't have pre-balance.
-                    // TODO: In a production version, we would fetch pre-simulation balances.
-                    // But the task asks to update SimulationResult to include balance_changes.
-                    // We'll treat the post-balance as the change if we assume 0 pre-balance for now,
-                    // OR we can just report the post-balance.
-                    // Let's assume we want NET change.
-                    // Since simulateTransaction doesn't give PRE balances, we can't calculate NET change easily
-                    // without an extra RPC call.
-                    // However, for the purpose of the "MaxBalanceDrainCheck", we usually want to know
-                    // how much was taken OUT.
-                    // If we don't have pre-balance, we can't know the drain.
-                    // Wait, Solana simulateTransaction CAN return post-simulation accounts.
-                    // To get NET change, we need pre-simulation balances.
-                    balance_changes.insert(address, account.lamports as i64);
+                let address = tx.message.account_keys[i].to_string();
+                let pre = pre_balances.get(&address).copied().unwrap_or(0);
+                let post = account_opt.map(|a| a.lamports as i64).unwrap_or(0);
+                let delta = post - pre;
+                if delta != 0 {
+                    balance_changes.insert(address, delta);
                 }
             }
         }
 
+        let sim_logs = result.logs.unwrap_or_default();
+        let sim_hash = compute_simulation_hash(&sim_logs, &result.err);
+
         Ok(SimulationResult {
-            logs: result.logs.unwrap_or_default(),
+            logs: sim_logs,
             units_consumed: result.units_consumed,
             return_data,
             error: result.err,
             balance_changes,
+            simulation_hash: Some(sim_hash),
         })
+    }
+}
+
+impl HeliusSimulator {
+    fn fetch_pre_balances(&self, addresses: &[String]) -> Result<HashMap<String, i64>> {
+        if addresses.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let request_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getMultipleAccounts",
+            "params": [
+                addresses,
+                { "encoding": "base64" }
+            ]
+        });
+
+        #[derive(Deserialize)]
+        struct AccountInfo {
+            lamports: u64,
+        }
+
+        #[derive(Deserialize)]
+        struct MultiResult {
+            value: Vec<Option<AccountInfo>>,
+        }
+
+        let response = self
+            .client
+            .post(self.rpc_endpoint())
+            .json(&request_body)
+            .send()
+            .map_err(|err| anyhow!("Failed to fetch pre-balances: {err}"))?
+            .error_for_status()
+            .map_err(|err| anyhow!("Pre-balance HTTP error: {err}"))?;
+
+        let rpc_resp: RpcResponse<MultiResult> = response
+            .json()
+            .map_err(|err| anyhow!("Failed to parse pre-balance response: {err}"))?;
+
+        if let Some(err) = rpc_resp.error {
+            return Err(anyhow!("Pre-balance RPC Error: {}", err.message));
+        }
+
+        let mut balances = HashMap::new();
+        if let Some(result) = rpc_resp.result {
+            for (i, account) in result.value.into_iter().enumerate() {
+                if let Some(Some(account)) = Some(account) {
+                    if i < addresses.len() {
+                        balances.insert(addresses[i].clone(), account.lamports as i64);
+                    }
+                }
+            }
+        }
+        Ok(balances)
     }
 }

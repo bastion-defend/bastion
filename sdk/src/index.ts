@@ -3,7 +3,7 @@ import { Provider, Program, BN } from "@coral-xyz/anchor";
 import { Connection, PublicKey, Signer, Transaction } from "@solana/web3.js";
 
 export const BASTION_PROGRAM_ID = new PublicKey(
-  "BaStion11111111111111111111111111111111"
+  "BaSZuLcwjfh75T3TjbVYpTH4qpJt1tNoZ3S6PTkvNhCb"
 );
 
 export const AUDIT_SEED = "bastion_audit";

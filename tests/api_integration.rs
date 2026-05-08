@@ -16,8 +16,14 @@ use bastion::{
     build_app,
     logger::{AuditEntry, AuditLogger, Decision},
     policy::{MaxUnitsCheck, Policy},
+    program_client::OnChainClient,
     simulation::{ReturnData, Simulate, SimulationResult},
 };
+
+#[derive(serde::Deserialize)]
+struct PaginatedTestResponse {
+    entries: Vec<AuditEntry>,
+}
 
 #[derive(Clone)]
 struct MockSimulator {
@@ -58,6 +64,7 @@ fn mock_result() -> SimulationResult {
         }),
         error: None,
         balance_changes: std::collections::HashMap::new(),
+        simulation_hash: None,
     }
 }
 
@@ -70,6 +77,7 @@ fn simulation_result_with_error() -> SimulationResult {
             "InstructionError": [0, {"Custom": 6001}]
         })),
         balance_changes: std::collections::HashMap::new(),
+        simulation_hash: None,
     }
 }
 
@@ -80,6 +88,7 @@ fn simulation_result_with_units(units_consumed: u64) -> SimulationResult {
         return_data: None,
         error: None,
         balance_changes: std::collections::HashMap::new(),
+        simulation_hash: None,
     }
 }
 
@@ -92,6 +101,7 @@ fn simulation_result_with_drain(account: String, drain: u64) -> SimulationResult
         return_data: None,
         error: None,
         balance_changes,
+        simulation_hash: None,
     }
 }
 
@@ -121,7 +131,7 @@ fn test_app_with_result_and_policy(
         result: simulation_result,
     });
 
-    (build_app(policy, simulator, logger), tmp_dir)
+    (build_app(policy, simulator, logger, OnChainClient::disabled()), tmp_dir)
 }
 
 fn test_app_with_result(
@@ -228,8 +238,8 @@ async fn simulate_rejects_invalid_transaction_payload_and_logs_reason() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("logs");
-    assert!(logs.iter().any(|entry| {
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("logs");
+    assert!(logs.entries.iter().any(|entry| {
         matches!(entry.decision, Decision::Blocked(ref msg) if msg.contains("Invalid transaction payload"))
             && entry.intent.as_ref() == Some(&intent)
             && entry.transaction_id.is_some()
@@ -461,9 +471,9 @@ async fn simulate_logs_allowed_and_blocked_transactions() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("logs bytes");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("audit entries");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("audit entries");
 
-    assert!(logs.iter().any(|entry| {
+    assert!(logs.entries.iter().any(|entry| {
         matches!(entry.decision, Decision::Allowed)
             && entry
                 .simulation_result
@@ -472,7 +482,7 @@ async fn simulate_logs_allowed_and_blocked_transactions() {
                 == Some(42_000)
     }));
     assert!(
-        logs.iter()
+        logs.entries.iter()
             .any(|entry| matches!(entry.decision, Decision::Blocked(_)))
     );
 }
@@ -512,9 +522,9 @@ async fn simulate_bypasses_simulation_checks_when_disabled() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("logs");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("logs");
     assert!(
-        logs.iter()
+        logs.entries.iter()
             .any(|entry| matches!(entry.decision, Decision::Allowed))
     );
 }
@@ -559,9 +569,9 @@ async fn simulate_enforces_no_error_check_and_logs_failure() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("logs bytes");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("audit entries");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("audit entries");
 
-    assert!(logs.iter().any(|entry| {
+    assert!(logs.entries.iter().any(|entry| {
         matches!(entry.decision, Decision::PendingApproval(_))
             && entry
                 .simulation_result
@@ -612,9 +622,9 @@ async fn simulate_enforces_max_units_check_and_logs_failure() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("logs bytes");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("audit entries");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("audit entries");
 
-    assert!(logs.iter().any(|entry| {
+    assert!(logs.entries.iter().any(|entry| {
         matches!(entry.decision, Decision::PendingApproval(_))
             && entry
                 .simulation_result
@@ -686,10 +696,10 @@ async fn simulate_logs_intent_field() {
     let body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).expect("logs");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).expect("logs");
 
     assert!(
-        logs.iter()
+        logs.entries.iter()
             .any(|entry| entry.intent.as_ref() == Some(&intent))
     );
 }
@@ -803,7 +813,7 @@ async fn override_workflow_allows_blocked_transaction() {
     let limit = 1_000_000;
     let drain = limit + 1;
     let account = Pubkey::new_unique().to_string();
-    let intent = "drain me daddy".to_string();
+    let intent = "large transfer".to_string();
 
     let policy = test_policy(vec![transfer_id.to_string()], true, Some(limit));
     let (app, _tmp_dir) = test_app_with_result_and_policy(
@@ -848,8 +858,8 @@ async fn override_workflow_allows_blocked_transaction() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("logs");
-    assert!(logs.iter().any(|entry| {
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("logs");
+    assert!(logs.entries.iter().any(|entry| {
         matches!(entry.decision, Decision::PendingApproval(ref id) if id == &block_id)
     }));
 
@@ -888,11 +898,11 @@ async fn override_workflow_allows_blocked_transaction() {
     let logs_body = to_bytes(logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&logs_body).expect("logs");
+    let logs: PaginatedTestResponse = serde_json::from_slice(&logs_body).expect("logs");
 
     // We expect both the Pending and the Allowed entry
     assert!(
-        logs.iter()
+        logs.entries.iter()
             .any(|entry| matches!(entry.decision, Decision::Allowed))
     );
 }
@@ -1004,10 +1014,10 @@ async fn logs_endpoint_supports_result_filter_and_limit() {
     let body = to_bytes(filtered_logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).expect("logs");
-    assert_eq!(logs.len(), 1);
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).expect("logs");
+    assert_eq!(logs.entries.len(), 1);
     assert!(
-        logs.iter()
+        logs.entries.iter()
             .all(|entry| matches!(entry.decision, Decision::Allowed))
     );
 }
@@ -1123,11 +1133,11 @@ async fn audit_logs_alias_endpoints_find_entries_by_transaction_id_and_signature
     let filtered_logs_body = to_bytes(filtered_logs_response.into_body(), usize::MAX)
         .await
         .expect("body");
-    let filtered_logs: Vec<AuditEntry> =
+    let filtered_logs: PaginatedTestResponse =
         serde_json::from_slice(&filtered_logs_body).expect("logs");
-    assert_eq!(filtered_logs.len(), 1);
+    assert_eq!(filtered_logs.entries.len(), 1);
     assert!(
-        filtered_logs
+        filtered_logs.entries
             .iter()
             .all(|entry| matches!(entry.decision, Decision::Allowed))
     );

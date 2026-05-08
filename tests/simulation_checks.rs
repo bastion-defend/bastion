@@ -14,6 +14,7 @@ fn clean_result() -> SimulationResult {
         return_data: None,
         error: None,
         balance_changes: HashMap::new(),
+        simulation_hash: None,
     }
 }
 

@@ -6,9 +6,8 @@ solana-version = "1.18"
 cluster = "devnet"
 wallet = "~/.config/solana/dev.json"
 
-[programs]
-devnet = "BaStion11111111111111111111111111111111"
-mainnet = ""
+[programs.devnet]
+bastion_audit = "BaSZuLcwjfh75T3TjbVYpTH4qpJt1tNoZ3S6PTkvNhCb"
 
 [scripts]
 test = "cargo test --features devnet"

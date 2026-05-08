@@ -2,8 +2,10 @@ use bastion::{
     audit::AuditLogger,
     build_app,
     policy::Policy,
+    program_client::OnChainClient,
     simulation::{HeliusSimulator, Simulate},
 };
+use std::env;
 use std::fs;
 use std::sync::Arc;
 use tokio::signal;
@@ -20,7 +22,21 @@ async fn main() {
     let simulator: Arc<dyn Simulate + Send + Sync> =
         Arc::new(HeliusSimulator::new().expect("create Helius simulator"));
     let logger = Arc::new(AuditLogger::new("audit_logs").expect("create audit logger"));
-    let app = build_app(policy, simulator, logger);
+
+    let on_chain_enabled = env::var("BASTION_ON_CHAIN").is_ok();
+    let on_chain = if on_chain_enabled {
+        let rpc_url = env::var("SOLANA_RPC_URL")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        let keypair_path = env::var("BASTION_KEYPAIR_PATH")
+            .expect("BASTION_KEYPAIR_PATH required when BASTION_ON_CHAIN is set");
+        OnChainClient::new(rpc_url, keypair_path, true)
+            .expect("create on-chain client")
+    } else {
+        eprintln!("[bastion] On-chain audit logging disabled (set BASTION_ON_CHAIN to enable)");
+        OnChainClient::disabled()
+    };
+
+    let app = build_app(policy, simulator, logger, on_chain);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await

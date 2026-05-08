@@ -1,0 +1,7 @@
+target/
+programs/bastion-audit/target/
+*.json
+!programs/bastion-audit/bastion-audit-keypair.json
+!.agents/
+!.env
+*.pen

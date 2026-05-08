@@ -28,8 +28,14 @@ use bastion::{
     build_app,
     logger::{AuditEntry, AuditLogger, AuditResult, Decision},
     policy::Policy,
+    program_client::OnChainClient,
     simulation::{Simulate, SimulationResult},
 };
+
+#[derive(serde::Deserialize)]
+struct PaginatedTestResponse {
+    entries: Vec<AuditEntry>,
+}
 
 // ── Well-known program IDs ───────────────────────────────────────────────
 
@@ -150,6 +156,7 @@ impl Simulate for ConfigurableSimulator {
             return_data: None,
             error: self.error.clone(),
             balance_changes: self.balance_changes.clone(),
+            simulation_hash: None,
         })
     }
 }
@@ -172,7 +179,7 @@ fn build_test_app(
         blocked_addresses: vec![],
         simulation_checks_enabled: sim_checks,
     };
-    (build_app(policy, sim, logger), tmp)
+    (build_app(policy, sim, logger, OnChainClient::disabled()), tmp)
 }
 
 fn simulate_request(tx_b64: &str, intent: Option<&str>) -> Request<Body> {
@@ -219,7 +226,8 @@ async fn battery_jupiter_swap_allowed_and_logged() {
     // Verify audit log
     let logs_resp = app.oneshot(get_request("/logs")).await.unwrap();
     let body = to_bytes(logs_resp.into_body(), usize::MAX).await.unwrap();
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).unwrap();
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).unwrap();
+    let logs = logs.entries;
     assert!(logs.iter().any(|e| {
         matches!(e.decision, Decision::Allowed)
             && e.intent.as_deref() == Some("jupiter swap")
@@ -612,7 +620,8 @@ async fn override_reject_for_blocked_transfer() {
     // Verify audit log records the rejection
     let logs_resp = app.oneshot(get_request("/logs")).await.unwrap();
     let body = to_bytes(logs_resp.into_body(), usize::MAX).await.unwrap();
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).unwrap();
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).unwrap();
+    let logs = logs.entries;
     assert!(logs.iter().any(|e| {
         matches!(e.decision, Decision::Blocked(ref msg) if msg.contains("Rejected by human override"))
     }));
@@ -643,7 +652,8 @@ async fn audit_logs_contain_transaction_details_for_allowed_tx() {
 
     let logs_resp = app.oneshot(get_request("/logs")).await.unwrap();
     let body = to_bytes(logs_resp.into_body(), usize::MAX).await.unwrap();
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).unwrap();
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).unwrap();
+    let logs = logs.entries;
 
     let entry = logs
         .iter()
@@ -677,7 +687,8 @@ async fn audit_logs_contain_simulation_result_for_allowed_tx() {
 
     let logs_resp = app.oneshot(get_request("/logs")).await.unwrap();
     let body = to_bytes(logs_resp.into_body(), usize::MAX).await.unwrap();
-    let logs: Vec<AuditEntry> = serde_json::from_slice(&body).unwrap();
+    let logs: PaginatedTestResponse = serde_json::from_slice(&body).unwrap();
+    let logs = logs.entries;
 
     let entry = logs
         .iter()
