@@ -21,7 +21,7 @@ Bastion is a high-performance security middleware for autonomous AI agents on So
 
 ## Overview
 
-Bastion v2 is an upgraded fork of Sentinel (by ClawdieLabs), built for the Solana Frontier Hackathon Infrastructure track. It provides:
+Bastion v2 is an upgraded fork of Sentinel (by ClawdieLabs), built for the Solana Frontier Hackathon Infrastructure track. Sentinel v1 was a proof-of-concept Rust proxy with basic policy parsing. Bastion v2 upgrades it with **on-chain audit, agent identity registry, multi-agent support, and an enhanced policy engine** — transforming a local proxy into a verifiable, on-chain security layer for autonomous agents. It provides:
 
 - Transaction validation and simulation
 - Policy-based access control
@@ -35,15 +35,15 @@ Bastion v2 is an upgraded fork of Sentinel (by ClawdieLabs), built for the Solan
 
 **Bastion's Unfair Advantage:** Only security tool with on-chain verifiable reputation + audit:
 
-| Feature | Bastion | AgentGuard | Agent Guardrails | Sigil |
-|---------|---------|-----------|-------------------|------|
-| On-chain audit | Yes (Anchor) | No | No | No |
-| Agent reputation | Yes (on-chain) | No | No | No |
-| Circuit breaker | Yes | No | No | Yes |
-| Human override | Yes | Yes | Yes | No |
-| Helius simulation | Yes | No | No | No |
-| TypeScript SDK | Yes | Yes | No | No |
-| Dashboard | Yes | No | No | No |
+| Feature | Bastion | Sentinel v1 | AgentGuard | Agent Guardrails | Sigil |
+|---------|---------|-------------|-----------|-------------------|------|
+| On-chain audit | Yes (Anchor) | No | No | No | No |
+| Agent reputation | Yes (on-chain) | No | No | No | No |
+| Circuit breaker | Yes | No | No | No | Yes |
+| Human override | Yes | No | Yes | Yes | No |
+| Helius simulation | Yes | No | No | No | No |
+| TypeScript SDK | Yes | No | Yes | No | No |
+| Dashboard | Yes | No | No | No | No |
 
 **Why this wins:**
 

@@ -464,6 +464,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "bastion"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "bincode",
+ "dotenv",
+ "reqwest 0.12.4",
+ "serde",
+ "serde_json",
+ "sled",
+ "solana-client",
+ "solana-sdk",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml 0.8.23",
+ "tower",
+ "tower-http",
+ "uuid",
+]
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3386,30 +3410,6 @@ name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
-
-[[package]]
-name = "sentinel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.22.1",
- "bincode",
- "dotenv",
- "reqwest 0.12.4",
- "serde",
- "serde_json",
- "sled",
- "solana-client",
- "solana-sdk",
- "tempfile",
- "thiserror",
- "tokio",
- "toml 0.8.23",
- "tower",
- "tower-http",
- "uuid",
-]
 
 [[package]]
 name = "serde"
