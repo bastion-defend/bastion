@@ -13,6 +13,7 @@ use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 pub mod audit;
+pub mod core_adapter;
 pub mod logger;
 pub mod policy;
 pub mod program_client;
@@ -883,6 +884,12 @@ async fn disengage_circuit_breaker(State(state): State<AppState>) -> Json<Circui
     Json(CircuitBreakerStatus { engaged: false })
 }
 
+async fn evaluate_v2(
+    Json(req): Json<core_adapter::EvaluateRequest>,
+) -> Json<core_adapter::EvaluateResponse> {
+    Json(core_adapter::evaluate_core(req).await)
+}
+
 pub fn build_app(
     policy: Policy,
     simulator: Arc<dyn Simulate + Send + Sync>,
@@ -901,6 +908,7 @@ pub fn build_app(
     Router::new()
         .route("/", get(hello))
         .route("/health", get(health))
+        .route("/api/v2/evaluate", post(evaluate_v2))
         .route("/simulate", post(simulate))
         // Audit log endpoints
         .route("/logs", get(get_logs))

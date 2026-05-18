@@ -23,6 +23,7 @@ uuid = { version = "1.20.0", features = ["v4"] }
 tower-http = { version = "0.5", features = ["fs"] }
 sha2 = "0.10"
 bastion-core = { path = "../core" }
+async-trait = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
