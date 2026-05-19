@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useAccount } from 'wagmi';
+import { useChain } from '../context/ChainContext';
 import { Navbar } from '../components/Navbar';
 import { VideoBackground } from '../components/VideoBackground';
 
@@ -9,19 +11,19 @@ const FEATURES = [
   {
     title: 'Transaction Simulation',
     description:
-      'Every transaction is simulated against live Solana state via Helius before signing. Balance drain, error codes, and compute units are checked in real time.',
+      'Every transaction is simulated against live chain state before signing. Balance drain, error codes, and compute units are checked in real time across any supported network.',
     tag: 'Core',
   },
   {
     title: 'On-Chain Audit Trail',
     description:
-      'Every decision — allowed, blocked, or pending — is recorded as an immutable Anchor PDA on Solana. Verifiable on-chain by anyone, at any time.',
+      'Every decision — allowed, blocked, or pending — is recorded as an immutable on-chain record. Verifiable by anyone, at any time, on any supported network.',
     tag: 'Unique',
   },
   {
     title: 'Policy Engine',
     description:
-      'Configurable SOL caps, rate limits, program allowlists, and Blockint security checks. Policy runs before simulation; nothing reaches the chain without passing both layers.',
+      'Configurable native token caps, rate limits, program allowlists, and Blockint security checks. Policy runs before simulation; nothing reaches the chain without passing both layers.',
     tag: 'Core',
   },
   {
@@ -33,7 +35,7 @@ const FEATURES = [
   {
     title: 'Agent Identity Registry',
     description:
-      'Every agent gets an on-chain identity PDA tied to its authority key. Reputation compounds across sessions. The first agent registry on Solana.',
+      'Every agent gets an on-chain identity tied to its authority key. Reputation compounds across sessions. Multichain agent registry with ERC-8004 compliance.',
     tag: 'Unique',
   },
   {
@@ -54,14 +56,18 @@ const TAG_COLORS: Record<string, string> = {
 const FLOW_STEPS = [
   { label: 'AI Agent', sub: 'Constructs transaction' },
   { label: 'Bastion', sub: 'Policy + simulation check' },
-  { label: 'Helius', sub: 'Live state simulation' },
-  { label: 'Solana', sub: 'On-chain audit recorded' },
+  { label: 'Simulator', sub: 'Live state simulation' },
+  { label: 'Chain', sub: 'On-chain audit recorded' },
 ];
 
 export default function Landing() {
-  const { connected } = useWallet();
+  const { chain } = useChain();
+  const { connected: solConnected } = useWallet();
   const { setVisible } = useWalletModal();
+  const { isConnected: evmConnected } = useAccount();
   const navigate = useNavigate();
+
+  const connected = chain === 'solana' ? solConnected : evmConnected;
 
   useEffect(() => {
     if (connected) navigate('/dashboard');
@@ -233,7 +239,7 @@ export default function Landing() {
           className="font-sans mt-4 max-w-md text-base leading-relaxed"
           style={{ color: 'var(--text-muted)' }}
         >
-          Open source. MIT licensed. Built on Solana.
+          Open source. MIT licensed. Multichain by design.
         </p>
         <button
           onClick={handleCTA}
@@ -253,7 +259,7 @@ export default function Landing() {
           Bastion<sup className="text-xs align-super">®</sup>
         </span>
         <span className="font-sans text-sm" style={{ color: 'var(--text-muted)' }}>
-          Bastion v0.3.0 — AI Agent Firewall for Solana
+          Bastion v0.3.0 — Multichain AI Agent Firewall
         </span>
         <a
           href="https://github.com/bastion-defend/bastion"

@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useAccount } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useChain } from '../context/ChainContext';
 import { useTheme } from '../context/ThemeContext';
 import { Navbar } from '../components/Navbar';
 import { useBastionProgram, type AuditEntryData, type PolicyData, type StatsData } from '../hooks/useBastionProgram';
+import { useBastionEVM } from '../hooks/useBastionEVM';
 
 const DECISION_COLORS = {
   ALLOWED: { text: '#22c55e', border: '#22c55e' },
@@ -13,9 +17,17 @@ const DECISION_COLORS = {
 };
 
 export default function Dashboard() {
+  const { chain } = useChain();
   const { theme } = useTheme();
   const navigate = useNavigate();
-  const { connected } = useWallet();
+
+  const { connected: solConnected } = useWallet();
+  const { isConnected: evmConnected } = useAccount();
+  const connected = chain === 'solana' ? solConnected : evmConnected;
+
+  const sol = useBastionProgram();
+  const evm = useBastionEVM();
+
   const {
     fetchStats,
     fetchPaused,
@@ -23,7 +35,7 @@ export default function Dashboard() {
     fetchPolicy,
     emergencyPause,
     emergencyResume,
-  } = useBastionProgram();
+  } = chain === 'solana' ? sol : evm;
 
   const [activeTab, setActiveTab] = useState<'pending' | 'logs' | 'policy'>('logs');
   const [logs, setLogs] = useState<AuditEntryData[]>([]);
@@ -73,6 +85,8 @@ export default function Dashboard() {
     { key: 'policy' as const, label: 'Policy' },
   ];
 
+  const tokenSymbol = chain === 'solana' ? 'SOL' : 'CELO';
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -84,7 +98,7 @@ export default function Dashboard() {
               Firewall Dashboard
             </h1>
             <p className="font-sans text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-              AI Agent Firewall for Solana — v0.3.0
+              Multichain AI Agent Firewall — v0.3.0
             </p>
           </div>
 
@@ -98,7 +112,13 @@ export default function Dashboard() {
             >
               {loading ? '...' : isPaused ? 'PAUSED' : 'LIVE'}
             </span>
-            <WalletMultiButton />
+            {chain === 'solana' ? (
+              <WalletMultiButton />
+            ) : (
+              <div className="[&_button]:!rounded-full [&_button]:!text-sm">
+                <ConnectButton showBalance={false} accountStatus="address" chainStatus="none" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -200,11 +220,11 @@ export default function Dashboard() {
           {!loading && activeTab === 'policy' && (
             <div className="space-y-6 max-w-lg">
               <div>
-                <label htmlFor="max-sol" className="block font-sans text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                  Max SOL per Transaction
+                <label htmlFor="max-token" className="block font-sans text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                  Max {tokenSymbol} per Transaction
                 </label>
                 <input
-                  id="max-sol"
+                  id="max-token"
                   type="number"
                   min="0"
                   value={policy?.maxSolPerTx ?? 0}
