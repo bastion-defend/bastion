@@ -1,0 +1,10 @@
+# index.html: never cache — browser must always fetch fresh so it picks up
+# the latest Vite content-hashed asset filenames.
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+# Vite-hashed JS/CSS assets: cache forever — filename changes on every build.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

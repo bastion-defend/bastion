@@ -5,10 +5,12 @@ import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { celo } from 'wagmi/chains';
-import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { injected, walletConnect } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './context/ThemeContext';
 import { ChainProvider } from './context/ChainContext';
+import { EvmProviderErrorBoundary } from './components/EvmProviderErrorBoundary';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Integrate from './pages/integrate/Integrate';
@@ -19,16 +21,31 @@ const SOLANA_RPC = 'https://api.devnet.solana.com';
 
 const queryClient = new QueryClient();
 
-const wagmiConfig = createConfig(
-  getDefaultConfig({
-    appName: 'Bastion',
-    projectId: 'bastion-defend',
-    chains: [celo],
-    transports: {
-      [celo.id]: http('https://forno.celo.org'),
-    },
-  }),
-);
+// Build connectors defensively — if the injected connector fails due to
+// multiple wallet extensions fighting over window.ethereum, WalletConnect
+// remains available as a fallback.
+const connectors = (() => {
+  const list = [
+    walletConnect({
+      projectId: 'bastion-defend',
+      showQrModal: false,
+    }),
+  ];
+  try {
+    list.push(injected({ target: 'metaMask' }));
+  } catch {
+    // Another extension has locked window.ethereum — skip injected connector.
+  }
+  return list;
+})();
+
+const wagmiConfig = createConfig({
+  chains: [celo],
+  connectors,
+  transports: {
+    [celo.id]: http('https://forno.celo.org'),
+  },
+});
 
 function AppRoutes() {
   const solanaWallets = useMemo(() => [new SolflareWalletAdapter()], []);
@@ -37,18 +54,20 @@ function AppRoutes() {
     <ConnectionProvider endpoint={SOLANA_RPC}>
       <WalletProvider wallets={solanaWallets} autoConnect>
         <WalletModalProvider>
-          <WagmiProvider config={wagmiConfig}>
-            <QueryClientProvider client={queryClient}>
-              <RainbowKitProvider>
-                <Routes>
-                  <Route path="/"          element={<Landing />} />
-                  <Route path="/integrate"  element={<Integrate />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="*"          element={<Navigate to="/" replace />} />
-                </Routes>
-              </RainbowKitProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          <EvmProviderErrorBoundary>
+            <WagmiProvider config={wagmiConfig}>
+              <QueryClientProvider client={queryClient}>
+                <RainbowKitProvider>
+                  <Routes>
+                    <Route path="/"          element={<Landing />} />
+                    <Route path="/integrate"  element={<Integrate />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="*"          element={<Navigate to="/" replace />} />
+                  </Routes>
+                </RainbowKitProvider>
+              </QueryClientProvider>
+            </WagmiProvider>
+          </EvmProviderErrorBoundary>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
