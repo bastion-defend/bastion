@@ -271,7 +271,7 @@ export default function Landing() {
           Bastion v0.3.0 — Multichain AI Agent Firewall
         </span>
         <a
-          href="https://github.com/bastion-defend/bastion"
+          href="https://github.com/bastion-agentic-defense/bastion"
           target="_blank"
           rel="noopener noreferrer"
           className="font-sans text-sm transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"

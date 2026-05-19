@@ -1,7 +1,7 @@
 ---
 name: bastion
 description: "High-performance Rust firewall for AI Agents. Intercepts, simulates, and validates transactions before signing."
-homepage: "https://github.com/bastion-defend/bastion"
+homepage: "https://github.com/bastion-agentic-defense/bastion"
 metadata: {
   "category": "security",
   "emoji": "🛡️",
@@ -19,7 +19,7 @@ Bastion is an autonomous security middleware that sits between an Agent's Brain 
 
 ```bash
 # Clone and build
-git clone https://github.com/bastion-defend/bastion.git
+git clone https://github.com/bastion-agentic-defense/bastion.git
 cd bastion && cargo build --release
 ```
 

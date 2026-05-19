@@ -10,9 +10,9 @@ import { CHAIN_LIST } from '../lib/chains';
 
 const NAV_LINKS = [
   { label: 'Home',          href: '/' },
-  { label: 'Documentation', href: 'https://github.com/bastion-defend/bastion', external: true },
+  { label: 'Documentation', href: 'https://github.com/bastion-agentic-defense/bastion', external: true },
   { label: 'SDK',           href: '/integrate' },
-  { label: 'GitHub',        href: 'https://github.com/bastion-defend', external: true },
+  { label: 'GitHub',        href: 'https://github.com/bastion-agentic-defense', external: true },
   { label: 'Audit',         href: '/dashboard' },
 ];
 

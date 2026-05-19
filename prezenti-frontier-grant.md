@@ -13,7 +13,7 @@
 ---
 
 ## Website
-**https://github.com/bastion-defend/bastion**
+**https://github.com/bastion-agentic-defense/bastion**
 
 ---
 
@@ -33,7 +33,7 @@
 ---
 
 ## Is your project fully open source
-**Yes.** MIT licensed. Full source at https://github.com/bastion-defend/bastion . Includes the Rust middleware, Anchor/Solana on-chain program, Solidity/EVM contracts, TypeScript SDK, and React dashboard.
+**Yes.** MIT licensed. Full source at https://github.com/bastion-agentic-defense/bastion . Includes the Rust middleware, Anchor/Solana on-chain program, Solidity/EVM contracts, TypeScript SDK, and React dashboard.
 
 ---
 
