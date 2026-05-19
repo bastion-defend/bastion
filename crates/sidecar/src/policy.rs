@@ -281,15 +281,11 @@ impl BlockintRules {
             }
             let ix_type = instruction.data[0];
             match ix_type {
-                9 | 10 => {
-                    if self.mint_authority_changes_blocked {
-                        return Err("Blockint: mint authority change blocked by policy".into());
-                    }
+                9 | 10 if self.mint_authority_changes_blocked => {
+                    return Err("Blockint: mint authority change blocked by policy".into());
                 }
-                4 => {
-                    if self.freeze_authority_changes_blocked {
-                        return Err("Blockint: freeze authority change blocked by policy".into());
-                    }
+                4 if self.freeze_authority_changes_blocked => {
+                    return Err("Blockint: freeze authority change blocked by policy".into());
                 }
                 _ => {}
             }

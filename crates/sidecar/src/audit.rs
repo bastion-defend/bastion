@@ -194,7 +194,7 @@ impl AuditLogger {
             logs.push(entry);
         }
 
-        logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        logs.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(logs.into_iter().skip(offset).take(limit).collect())
     }
 
