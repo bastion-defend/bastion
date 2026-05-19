@@ -6,10 +6,32 @@ interface Props {
   chain: ChainId;
 }
 
-const HEALTH_ENDPOINTS: Record<ChainId, string> = {
-  solana: 'https://api.devnet.solana.com/health',
-  celo: 'https://forno.celo.org',
-};
+// Each chain needs a different health-check strategy:
+//   Solana  — GET /health returns "ok" as plain text
+//   Celo    — EVM JSON-RPC POST eth_blockNumber (getHealth is a Solana method and
+//             causes forno.celo.org to return 403)
+async function checkChainHealth(chain: ChainId): Promise<{ ok: boolean; detail: string }> {
+  if (chain === 'solana') {
+    const res = await fetch('https://api.devnet.solana.com/health', { method: 'GET' });
+    if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+    const text = await res.text();
+    // Solana returns "ok" when healthy, "behind" when lagging
+    if (text.trim() === 'ok') return { ok: true, detail: 'ok' };
+    return { ok: false, detail: text.trim() };
+  }
+
+  // Celo (EVM) — use eth_blockNumber
+  const res = await fetch(CHAINS.celo.rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+  });
+  if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+  const json = await res.json();
+  if (json.error) return { ok: false, detail: json.error.message ?? 'RPC error' };
+  const block = parseInt(json.result, 16);
+  return { ok: true, detail: `block #${block.toLocaleString()}` };
+}
 
 export default function LiveTest({ chain }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -20,18 +42,18 @@ export default function LiveTest({ chain }: Props) {
     setMessage('');
 
     try {
-      const url = HEALTH_ENDPOINTS[chain];
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' });
-      if (res.ok) {
+      const { ok, detail } = await checkChainHealth(chain);
+      if (ok) {
         setStatus('ok');
-        setMessage(`Connected to ${CHAINS[chain].name}. RPC is healthy.`);
+        setMessage(`Connected to ${CHAINS[chain].name}. RPC is healthy. (${detail})`);
       } else {
         setStatus('error');
-        setMessage(`RPC returned status ${res.status}.`);
+        setMessage(`RPC check failed: ${detail}`);
       }
-    } catch {
+    } catch (err) {
       setStatus('error');
       setMessage(`Could not reach ${CHAINS[chain].name} RPC. Check your network.`);
+      console.error('[Bastion] LiveTest error:', err);
     }
   }
 

@@ -43,7 +43,7 @@ const wagmiConfig = createConfig({
   chains: [celo],
   connectors,
   transports: {
-    [celo.id]: http('https://forno.celo.org'),
+    [celo.id]: http('https://rpc.ankr.com/celo'),
   },
 });
 

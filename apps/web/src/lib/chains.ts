@@ -26,7 +26,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     shortName: 'CELO',
     icon: '⊚',
     color: '#35D07F',
-    rpcUrl: 'https://forno.celo.org',
+    rpcUrl: 'https://rpc.ankr.com/celo',
     explorerUrl: 'https://celoscan.io',
   },
 };
