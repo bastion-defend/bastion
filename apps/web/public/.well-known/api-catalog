@@ -1,0 +1,23 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://bastionagenticdefense.netlify.app/simulate",
+      "service-desc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "service-doc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "status": "https://bastionagenticdefense.netlify.app/health",
+      "profile": "transaction-firewall"
+    },
+    {
+      "anchor": "https://bastionagenticdefense.netlify.app/logs",
+      "service-desc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "service-doc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "profile": "audit-logging"
+    },
+    {
+      "anchor": "https://bastionagenticdefense.netlify.app/policy",
+      "service-desc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "service-doc": "https://bastionagenticdefense.netlify.app/docs/api",
+      "profile": "policy-management"
+    }
+  ]
+}

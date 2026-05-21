@@ -1,0 +1,51 @@
+{
+  "serverInfo": {
+    "name": "Bastion Agentic Defense",
+    "version": "0.3.0"
+  },
+  "transport": {
+    "type": "http",
+    "endpoint": "https://bastionagenticdefense.netlify.app/simulate"
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "simulate_transaction",
+        "description": "Simulate a Solana transaction through Helius and evaluate against Bastion's policy engine. Returns balance changes, compute units, and any policy violations.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "transaction": {
+              "type": "string",
+              "description": "Base64-encoded Solana transaction"
+            },
+            "intent": {
+              "type": "string",
+              "description": "Human-readable description of what the transaction should do"
+            }
+          },
+          "required": ["transaction"]
+        }
+      },
+      {
+        "name": "check_policy",
+        "description": "Query Bastion's current policy configuration including allowed programs, SOL caps, rate limits, and blockint rules.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "get_audit_logs",
+        "description": "Retrieve paginated audit logs showing all transaction decisions made by Bastion.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": { "type": "integer", "description": "Max entries to return" },
+            "offset": { "type": "integer", "description": "Pagination offset" }
+          }
+        }
+      }
+    ]
+  }
+}

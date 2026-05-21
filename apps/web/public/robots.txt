@@ -1,0 +1,49 @@
+Sitemap: https://bastionagenticdefense.netlify.app/sitemap.xml
+
+# ── AI Crawlers ──────────────────────────────────────────────
+# Allow responsible AI crawlers with rate limits.
+# Deny those that ignore robots.txt or serve unlabeled training data.
+
+User-agent: GPTBot
+Disallow: /dashboard
+Crawl-delay: 10
+
+User-agent: OAI-SearchBot
+Allow: /
+Crawl-delay: 10
+
+User-agent: Claude-Web
+Allow: /
+Crawl-delay: 20
+
+User-agent: Claude-AI
+Allow: /
+Crawl-delay: 20
+
+User-agent: Google-Extended
+Allow: /
+Crawl-delay: 10
+
+User-agent: anthropic-ai
+Disallow: /dashboard
+Crawl-delay: 20
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Allow: /
+Crawl-delay: 10
+
+# ── Search Engines ───────────────────────────────────────────
+
+User-agent: *
+Allow: /
+Crawl-delay: 5
+
+# ── Content Signals ──────────────────────────────────────────
+# Declare AI content usage preferences per contentsignals.org
+
+Content-Signal: ai-train=no
+Content-Signal: search=yes
+Content-Signal: ai-input=no

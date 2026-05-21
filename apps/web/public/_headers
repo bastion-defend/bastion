@@ -4,7 +4,28 @@
   Cache-Control: no-cache, no-store, must-revalidate
   Pragma: no-cache
   Expires: 0
+  Link: </.well-known/api-catalog>; rel="api-catalog"
+  Link: </.well-known/agent-skills/index.json>; rel="agent-skills"
+  Link: </.well-known/mcp/server-card.json>; rel="mcp-server-card"
 
 # Vite-hashed JS/CSS assets: cache forever — filename changes on every build.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Sitemap
+/sitemap.xml
+  Content-Type: application/xml; charset=UTF-8
+  Cache-Control: public, max-age=86400
+
+# Well-known endpoints
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
+  Cache-Control: public, max-age=3600
+
+/.well-known/agent-skills/index.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600
+
+/.well-known/mcp/server-card.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600
