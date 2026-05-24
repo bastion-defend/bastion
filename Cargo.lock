@@ -684,6 +684,7 @@ dependencies = [
  "bastion-core",
  "bincode",
  "dotenv",
+ "futures",
  "reqwest 0.12.4",
  "serde",
  "serde_json",
@@ -694,6 +695,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
  "toml 0.8.23",
  "tower",
  "tower-http",
@@ -5498,6 +5500,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

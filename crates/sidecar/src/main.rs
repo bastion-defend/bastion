@@ -5,6 +5,7 @@ use bastion_sidecar::{
     policy::Policy,
     program_client::OnChainClient,
     simulation::{HeliusSimulator, Simulate},
+    simulation_evm::CeloSimulator,
 };
 use std::env;
 use std::fs;
@@ -47,7 +48,18 @@ async fn main() {
         }
     };
 
-    let app = build_app(policy, simulator, logger, on_chain, grond_oracle);
+    let celo_sim = match env::var("CELO_RPC_URL") {
+        Ok(url) if !url.is_empty() => {
+            eprintln!("[bastion] Celo/EVM simulator enabled: {url}");
+            Some(Arc::new(CeloSimulator::from_rpc_url(url)))
+        }
+        _ => {
+            eprintln!("[bastion] Celo/EVM simulator disabled (set CELO_RPC_URL to enable)");
+            None
+        }
+    };
+
+    let app = build_app(policy, simulator, logger, on_chain, grond_oracle, celo_sim);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await

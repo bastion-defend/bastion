@@ -181,7 +181,7 @@ fn build_test_app(
         simulation_checks_enabled: sim_checks,
     };
     (
-        build_app(policy, sim, logger, OnChainClient::disabled(), GrondOracle::disabled()),
+        build_app(policy, sim, logger, OnChainClient::disabled(), GrondOracle::disabled(), None),
         tmp,
     )
 }

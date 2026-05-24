@@ -133,7 +133,7 @@ fn test_app_with_result_and_policy(
     });
 
     (
-        build_app(policy, simulator, logger, OnChainClient::disabled(), GrondOracle::disabled()),
+        build_app(policy, simulator, logger, OnChainClient::disabled(), GrondOracle::disabled(), None),
         tmp_dir,
     )
 }

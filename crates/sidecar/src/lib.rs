@@ -2,13 +2,17 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
     routing::{get, post},
 };
 use base64::Engine as _;
+use futures::stream::Stream;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Duration;
+use tokio::sync::{RwLock, broadcast};
+use tokio_stream::StreamExt;
 use tower_http::services::ServeDir;
 use uuid::Uuid;
 
@@ -19,6 +23,7 @@ pub mod logger;
 pub mod policy;
 pub mod program_client;
 pub mod simulation;
+pub mod simulation_evm;
 
 use audit::{
     AuditEntry, AuditLogger, AuditResult, Decision, TransactionDetails, current_timestamp,
@@ -31,6 +36,9 @@ use policy::{
 };
 use program_client::OnChainClient;
 use simulation::{Simulate, SimulationResult};
+use simulation_evm::{
+    CeloSimulator, EvmSimulate, EvmSimulateRequest, EvmSimulateResponse,
+};
 
 #[derive(Clone, serde::Serialize)]
 struct PendingApproval {
@@ -59,7 +67,14 @@ struct AppState {
     on_chain: Arc<OnChainClient>,
     pending_approvals: Arc<RwLock<HashMap<String, PendingApproval>>>,
     grond_oracle: GrondOracle,
+    celo_simulator: Option<Arc<CeloSimulator>>,
+    event_tx: broadcast::Sender<String>,
     started_at: std::time::Instant,
+}
+
+fn emit_event(tx: &broadcast::Sender<String>, event_type: &str, json_payload: &str) {
+    let msg = format!("event: {event_type}\ndata: {json_payload}\n\n");
+    let _ = tx.send(msg);
 }
 
 #[derive(serde::Deserialize)]
@@ -520,8 +535,14 @@ async fn simulate(
                 intent.clone(),
                 Some(tx_details.clone()),
             )
-        };
-        let _ = state.logger.log(entry);
+    };
+    let _ = state.logger.log(entry);
+
+    emit_event(&state.event_tx, "AuditRecorded", &serde_json::json!({
+        "decision": "Allowed",
+        "reason": "All policy and simulation checks passed",
+        "timestamp": current_timestamp()
+    }).to_string());
 
         return (
             StatusCode::FORBIDDEN,
@@ -904,6 +925,29 @@ async fn disengage_circuit_breaker(State(state): State<AppState>) -> Json<Circui
     Json(CircuitBreakerStatus { engaged: false })
 }
 
+async fn events_handler(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.event_tx.subscribe();
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
+        .filter_map(|result| result.ok())
+        .map(|msg| {
+            let (event_name, data) = parse_sse_message(&msg);
+            Ok(Event::default().event(event_name).data(data))
+        });
+
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+}
+
+fn parse_sse_message(msg: &str) -> (&str, &str) {
+    if let Some(rest) = msg.strip_prefix("event: ") {
+        if let Some((event, data)) = rest.split_once("\ndata: ") {
+            return (event, data);
+        }
+    }
+    ("message", msg)
+}
+
 async fn evaluate_v2(
     State(state): State<AppState>,
     Json(req): Json<core_adapter::EvaluateRequest>,
@@ -916,13 +960,108 @@ async fn evaluate_v2(
     Json(core_adapter::evaluate_core(req, grond).await)
 }
 
+async fn simulate_evm_handler(
+    State(state): State<AppState>,
+    Json(req): Json<EvmSimulateRequest>,
+) -> impl IntoResponse {
+    let sim = match &state.celo_simulator {
+        Some(s) => s.clone(),
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "error": "EVM simulation not configured. Set CELO_RPC_URL to enable."
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let chain = req.chain.as_deref().unwrap_or("celo");
+    let agent_id = req.agent_id.clone();
+    let intent = req.intent.clone();
+
+    let simulation_result = match sim.simulate_evm_tx(&req.transaction) {
+        Ok(r) => r,
+        Err(err) => {
+            let entry = AuditEntry {
+                ..build_audit_entry(
+                    None,
+                    Decision::Blocked(format!("EVM simulation failed: {err}")),
+                    AuditResult::Blocked,
+                    format!("EVM simulation failed: {err}"),
+                    None,
+                    intent.clone(),
+                    None,
+                )
+            };
+            let _ = state.logger.log(entry);
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(EvmSimulateResponse {
+                    allowed: false,
+                    decision: "blocked".to_string(),
+                    reason: Some(format!("Simulation failed: {err}")),
+                    simulation_result: None,
+                    risk_score: None,
+                    risk_summary: None,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let has_error = simulation_result.error.is_some();
+    let decision = if has_error { "blocked" } else { "passed" };
+
+    let transaction_id = agent_id.as_deref().map(|id| {
+        hash_transaction_payload(&format!("{}:{}:{}:{}",
+            id, req.transaction.from, req.transaction.to,
+            simulation_result.simulation_hash.unwrap_or([0u8; 32]).iter()
+                .map(|b| format!("{:02x}", b)).collect::<String>()
+        ))
+    });
+
+    let entry = AuditEntry {
+        ..build_audit_entry(
+            transaction_id.clone(),
+            if has_error {
+                Decision::Blocked("Simulation returned error".to_string())
+            } else {
+                Decision::Allowed
+            },
+            if has_error { AuditResult::Blocked } else { AuditResult::Allowed },
+            format!("EVM simulation on chain={chain}, agent={agent_id:?}, intent={intent:?}"),
+            Some(simulation_result.clone()),
+            intent.clone(),
+            None,
+        )
+    };
+    let _ = state.logger.log(entry);
+
+    Json(EvmSimulateResponse {
+        allowed: !has_error,
+        decision: decision.to_string(),
+        reason: if has_error {
+            simulation_result.error.as_ref().map(|e| format!("{:?}", e))
+        } else {
+            Some("EVM simulation passed all checks".to_string())
+        },
+        simulation_result: Some(simulation_result),
+        risk_score: None,
+        risk_summary: None,
+    }).into_response()
+}
+
 pub fn build_app(
     policy: Policy,
     simulator: Arc<dyn Simulate + Send + Sync>,
     logger: Arc<AuditLogger>,
     on_chain: OnChainClient,
     grond_oracle: GrondOracle,
+    celo_simulator: Option<Arc<CeloSimulator>>,
 ) -> Router {
+    let (event_tx, _) = broadcast::channel(256);
     let app_state = AppState {
         policy_engine: Arc::new(RwLock::new(PolicyEngine::new(policy))),
         simulator,
@@ -930,6 +1069,8 @@ pub fn build_app(
         on_chain: Arc::new(on_chain),
         pending_approvals: Arc::new(RwLock::new(HashMap::new())),
         grond_oracle,
+        celo_simulator,
+        event_tx,
         started_at: std::time::Instant::now(),
     };
 
@@ -937,6 +1078,8 @@ pub fn build_app(
         .route("/", get(hello))
         .route("/health", get(health))
         .route("/api/v2/evaluate", post(evaluate_v2))
+        .route("/api/v2/simulate-evm", post(simulate_evm_handler))
+        .route("/events", get(events_handler))
         .route("/simulate", post(simulate))
         // Audit log endpoints
         .route("/logs", get(get_logs))
