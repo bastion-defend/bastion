@@ -36,19 +36,24 @@ export function useBastionProgram() {
   const program = useMemo(() => {
     if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) return null;
 
-    const anchorWallet = {
-      publicKey: wallet.publicKey,
-      signTransaction: wallet.signTransaction,
-      signAllTransactions: wallet.signAllTransactions,
-    };
+    try {
+      const anchorWallet = {
+        publicKey: wallet.publicKey,
+        signTransaction: wallet.signTransaction,
+        signAllTransactions: wallet.signAllTransactions,
+      };
 
-    const provider = new AnchorProvider(
-      connection,
-      anchorWallet,
-      AnchorProvider.defaultOptions(),
-    );
+      const provider = new AnchorProvider(
+        connection,
+        anchorWallet,
+        AnchorProvider.defaultOptions(),
+      );
 
-    return new Program(idl, PROGRAM_ID, provider);
+      return new Program(idl, PROGRAM_ID, provider);
+    } catch (e) {
+      console.error('[Bastion] Failed to initialize Anchor Program:', e);
+      return null;
+    }
   }, [wallet.publicKey, wallet.signTransaction, wallet.signAllTransactions, connection]);
 
   const programId = useMemo(() => PROGRAM_ID, []);
