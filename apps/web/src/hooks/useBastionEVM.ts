@@ -12,13 +12,13 @@ const CONTRACT_ADDRESSES = {
 
 const AuditAbi = parseAbi([
   'function entryCount() external view returns (uint256)',
-  'function getEntry(uint256 entryId) external view returns (tuple(address agent, address target, bytes4 selector, uint256 value, uint256 gasUsed, bool allowed, string reason, uint256 timestamp))',
+  'function getEntry(uint256 entryId) external view returns ((address agent, address target, bytes4 selector, uint256 value, uint256 gasUsed, bool allowed, string reason, uint256 timestamp))',
   'function getAgentEntries(address agent, uint256 offset, uint256 limit) external view returns (uint256[] memory, uint256)',
   'event AuditRecorded(uint256 indexed entryId, address indexed agent, address target, bytes4 selector, uint256 value, uint256 gasUsed, bool allowed, string reason, uint256 timestamp)',
 ]);
 
 const PolicyAbi = parseAbi([
-  'function getPolicy(address agent) external view returns (tuple(bytes4[] allowedSelectors, uint256 maxValue, uint256 dailyTxLimit, uint256 cooldownSeconds))',
+  'function getPolicy(address agent) external view returns ((bytes4[] allowedSelectors, uint256 maxValue, uint256 dailyTxLimit, uint256 cooldownSeconds))',
   'function setPolicy(address agent, bytes4[] allowedSelectors, uint256 maxValue, uint256 dailyTxLimit, uint256 cooldownSeconds) external',
 ]);
 
