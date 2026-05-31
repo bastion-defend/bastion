@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter, SolflareWalletAdapter, BackpackWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
+import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
+import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { type Chain } from 'viem';
